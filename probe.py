@@ -22,7 +22,7 @@ class Probes(object):
         if refresh:
             self.refresh()
         self.save()
-
+    
     def exists(self, probe_id):
         '''check if we already have this probe'''
         for probe in self.probes.copy():
@@ -41,6 +41,9 @@ class Probes(object):
         '''load pickle data'''
         try:
             self.probes = pickle.load(open(self.probes_file, 'rb'))
+            for probe in self.probes:
+                probe.stat_api = ripestat.StatAPI('Atlas-Kibana')
+                probe.logger   = logging.getLogger('atlas-kibana.Probe')
         except IOError:
             self.logger.warning('unable to load probes file {}'.format(self.probes_file))
 
@@ -80,13 +83,16 @@ class Probes(object):
 
     def save(self):
         '''save the probes data'''
+        for probe in self.probes:
+            probe.stat_api = None
+            probe.logger   = None
         pickle.dump(self.probes, open(self.probes_file, 'wb'))
 
 class Probe(object):
 
     def __init__(self, probe):
         self.logger       = logging.getLogger('atlas-kibana.Probe')
-        self.staRuntimeErrortus       = probe.get('status_name',  None)
+        self.status       = probe.get('status_name',  None)
         self.status_since = probe.get('status_since', None)
         self.address_v4   = probe.get('address_v4',   None)
         self.address_v6   = probe.get('address_v6',   None)
@@ -147,8 +153,6 @@ class Probe(object):
     def __hash__(self):
         '''hash object'''
         return hash(self.__repr__())
-    
-
 
     def get_rir(self, prefix):
         '''use RIPEstat to get the rir name'''
