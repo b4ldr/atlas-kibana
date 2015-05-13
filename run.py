@@ -1,10 +1,16 @@
-#!/bin/usr/env python
+#!/usr/bin/env python
+import pdb
+import sys
+import json
 import probe
+import logging
 import requests
 import argparse
+import measuerments
 import elasticsearch
 import elasticsearch.helpers
 
+#index_items(client, items, index, doc_type, chunk_size)
 def index_items(hosts, actions, index, doc_type, chunk_size=200):
     client = elasticsearch.Elasticsearch(hosts=hosts)
     for ok, result in elasticsearch.helpers.streaming_bulk(
@@ -26,35 +32,41 @@ def get_args():
             help='api url to use api/v1/measurement-latest' )
     parser.add_argument('-I', '--index', default='testing-atlas-index',
             help="Index to store probe and measurement data in. Defaults to 'atlas-index'")
-    parser.add_argument('measurements',
-            help="Comma-separated list of measurements to index in Elasticsearch")
+    parser.add_argument('measurement_ids',  nargs='+', 
+            help="measurement(s) to index in Elasticsearch")
     return parser.parse_args()
 
-def main():
-    args = get_args()
-    log_level = logging.WARNING
-    client = es
-    items = probes.elasticsearch_source
-    index = index
-    doc_type = 'dns-results'
-    
-    if args.verbose == 1:
-        log_level = logging.INFO
-    elif args.verbose > 1:
-        log_level = logging.DEBUG
-    logging.basicConfig(log_level)
-    probes = probe.Probes()
-    
-    for msm_id in args.measurements.split(','):
-        url = '{}{}'.format(args.api, msm_id)
-        msms   = requests.get(url)
-        for probe_id, msm in msms.items():
-            probe = probes.get(probe_id)
-            measurment = measuerments.MeasurmentDNS(msm[0], probe)
-            for i in measurement.get_elasticsearch_source():
-                print i
+def set_log_level(verbose):
+    '''set the logger level'''
+    level = logging.WARNING
+    if verbose == 1:
+        level = logging.INFO
+    elif verbose > 1:
+        level = logging.DEBUG
+    logging.basicConfig(level=level)
 
-    index_items(client, items, index, doc_type, chunk_size)
+def main():
+    args     = get_args()
+    set_log_level(args.verbose)
+    logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(level=logging.ERROR)
+    requests.packages.urllib3.disable_warnings()
+    doc_type = 'dns-results'
+    probes   = probe.Probes()
+    for measurement_id in args.measurement_ids:
+        url = '{}{}'.format(args.api, measurement_id)
+        measurement_data = requests.get(url).json()
+        for probe_id, measurement_json in measurement_data.items():
+            logging.debug('Fetch probe {}'.format(probe_id))
+            p = probes.get(probe_id)
+            if not p:
+                logging.error('Unable to find Probe: {}'.format(probe_id))
+            #measurement_json is norally an array with 1 entry
+            for m in measurement_json:
+                measurement = measuerments.MeasurmentDNS(m, p)
+                for actions in measurement.get_elasticsearch_source():
+                    print json.dumps(actions, indent=4, sort_keys=True)
+
+    #index_items(client, items, index, doc_type, chunk_size)
 
 
 if __name__ == '__main__':

@@ -57,7 +57,8 @@ class MeasurmentDNS(Measurment):
             if response.abuf.header:
                 source['header'] = self._clean_dict(response.abuf.header.__dict__)
             if response.abuf.edns0:
-                source['edns0'] = response.abuf.edns0.__dict__
+                source['edns0']            = self._clean_dict(response.abuf.edns0.__dict__)
+                source['edns0']['options'] = self._hammer_to_dict(source['edns0']['options'])
             if response.abuf.questions:
                 source['questions']   = self._hammer_to_dict(response.abuf.questions)
             if response.abuf.answers:

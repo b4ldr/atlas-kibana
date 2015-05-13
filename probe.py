@@ -26,14 +26,14 @@ class Probes(object):
     def exists(self, probe_id):
         '''check if we already have this probe'''
         for probe in self.probes.copy():
-            if probe.id == probe_id:
+            if probe.id == int(probe_id):
                 return True
         return False
 
     def get(self, probe_id):
         '''get an probe element'''
         for probe in self.probes.copy():
-            if probe.id == probe_id:
+            if probe.id == int(probe_id):
                 return probe
         return False
 
