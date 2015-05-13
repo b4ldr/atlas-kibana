@@ -48,9 +48,11 @@ def main():
     for msm_id in args.measurements.split(','):
         url = '{}{}'.format(args.api, msm_id)
         msms   = requests.get(url)
-        for probe_id, msm in msms.iteritems():
+        for probe_id, msm in msms.items():
             probe = probes.get(probe_id)
             measurment = measuerments.MeasurmentDNS(msm[0], probe)
+            for i in measurement.get_elasticsearch_source():
+                print i
 
     index_items(client, items, index, doc_type, chunk_size)
 
