@@ -1,0 +1,80 @@
+#Used to create the index for the atlas measuerments
+PUT /_template/atlas
+{
+  "template": "atlas*",
+    "settings": {
+      "number_of_shards": "1",
+      "number_of_replicas": "0",
+      "index.refresh_interval": "15s"
+    },
+    "mappings": {
+      "_default_": {
+        "dynamic_templates": [{
+          "string_fields": {
+            "mapping": {
+              "index": "analyzed",
+              "omit_norms": true,
+              "type": "string",
+              "fields": {
+                "raw": {
+                  "index": "not_analyzed",
+                  "ignore_above": 32776,
+                  "type": "string"
+                }
+              }
+            },
+            "match": "*",
+            "match_mapping_type": "string"
+          }
+        }],
+        "properties": {
+          "additionals": {
+            "type": "nested",
+            "include_in_parent": true,
+            "properties": {
+              "address": {"type": "string", "index": "not_analyzed" },
+              "name": {"type": "string", "index": "not_analyzed" }
+            }
+          },
+          "answers": {
+            "type": "nested",
+            "include_in_parent": true,
+            "properties": {
+              "address": {"type": "string", "index": "not_analyzed"},
+              "mname": {"type": "string", "index": "not_analyzed"},
+              "rname": {"type": "string", "index": "not_analyzed"}
+            }
+          },
+          "authorities": {
+            "type": "nested",
+            "include_in_parent": true,
+            "properties": {
+              "address": {"type": "string", "index": "not_analyzed"},
+              "name": {"type": "string", "index": "not_analyzed" }
+            }
+          },
+          "edns0": {
+            "type": "nested",
+            "include_in_parent": true,
+            "properties": {
+              "options": {
+                "type": "nested",
+                "include_in_parent": true,
+                "properties": {
+                  "nsid": {"type": "string", "index": "not_analyzed" }
+                }
+              }
+            }
+          },
+          "questions": {
+            "type": "nested",
+            "include_in_parent": true,
+            "properties": {
+              "name": {"type": "string" },
+              "type": {"type": "string" }
+            }
+          }
+        }
+    }
+  }
+}

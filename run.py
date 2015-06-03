@@ -22,7 +22,7 @@ def index_items(hosts, actions, index, doc_type, chunk_size=200):
         action, result = result.popitem()
         if not ok:
             doc_id = result['_id']
-            logger.warning('Could not {0} document {1}: {2}'.format(action, doc_id, result))
+            logging.warning('Could not {0} document {1}: {2}'.format(action, doc_id, result))
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -30,7 +30,11 @@ def get_args():
     parser.add_argument('-A', '--api',
             default='https://atlas.ripe.net/api/v1/measurement-latest/',
             help='api url to use api/v1/measurement-latest' )
-    parser.add_argument('-I', '--index', default='testing-atlas-index',
+    parser.add_argument('-D', '--doc-type', required=True,
+            help="Index to store probe and measurement data in. Defaults to 'atlas-index'")
+    parser.add_argument('-I', '--index', required=True,
+            help="Index to store probe and measurement data in. Defaults to 'atlas-index'")
+    parser.add_argument('-H', '--hosts', default='localhost:9200',
             help="Index to store probe and measurement data in. Defaults to 'atlas-index'")
     parser.add_argument('measurement_ids',  nargs='+', 
             help="measurement(s) to index in Elasticsearch")
@@ -48,10 +52,19 @@ def set_log_level(verbose):
 def main():
     args     = get_args()
     set_log_level(args.verbose)
+    hosts   = []
     logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(level=logging.ERROR)
     requests.packages.urllib3.disable_warnings()
-    doc_type = 'dns-results'
     probes   = probe.Probes()
+    for host in args.hosts.split(','):
+        tokens    = host.split(':',1)
+        port      = 9200
+        host_name = tokens[0]
+        if len(tokens) == 2:
+            port = tokens[1]
+        hosts.append({
+            'host' : host_name,
+            'port' : port }) 
     for measurement_id in args.measurement_ids:
         url = '{}{}'.format(args.api, measurement_id)
         measurement_data = requests.get(url).json()
@@ -63,8 +76,10 @@ def main():
             #measurement_json is norally an array with 1 entry
             for m in measurement_json:
                 measurement = measuerments.MeasurmentDNS(m, p)
-                for actions in measurement.get_elasticsearch_source():
-                    print json.dumps(actions, indent=4, sort_keys=True)
+                index_items(hosts, measurement.get_elasticsearch_source(), 
+                        args.index, args.doc_type)
+                #for actions in measurement.get_elasticsearch_source():
+                #    print json.dumps(actions, indent=4, sort_keys=True)
 
     #index_items(client, items, index, doc_type, chunk_size)
 

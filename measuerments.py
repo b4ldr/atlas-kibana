@@ -1,4 +1,5 @@
 import logging
+import datetime
 from ripe.atlas.sagan import Result, ResultParseError
 
 class Measurment(object):
@@ -30,9 +31,9 @@ class Measurment(object):
                 pass
         return dict_in
 
-    def _hammer_to_dict(self, list_in):
+    def _clean_array(self, list_in):
         '''try to force a dict from a list of objects'''
-        return { idx : self._clean_dict(value.__dict__) for idx, value in enumerate(list_in) }
+        return [ self._clean_dict(value.__dict__) for value in list_in ]
 
 class MeasurmentDNS(Measurment):
 
@@ -53,19 +54,20 @@ class MeasurmentDNS(Measurment):
             #remove the result we will replace this with something nicer
             if 'result' in source:
                 del source['result']
-
+            source['timestamp']  = datetime.datetime.utcfromtimestamp(source['timestamp']).isoformat()
             if response.abuf.header:
                 source['header'] = self._clean_dict(response.abuf.header.__dict__)
             if response.abuf.edns0:
                 source['edns0']            = self._clean_dict(response.abuf.edns0.__dict__)
-                source['edns0']['options'] = self._hammer_to_dict(source['edns0']['options'])
+                source['edns0']['options'] = self._clean_array(source['edns0']['options'])
             if response.abuf.questions:
-                source['questions']   = self._hammer_to_dict(response.abuf.questions)
+                source['questions']   = self._clean_array(response.abuf.questions)
             if response.abuf.answers:
-                source['answers']     = self._hammer_to_dict(response.abuf.answers)
+                source['answers']     = self._clean_array(response.abuf.answers)
             if response.abuf.authorities:
-                source['authorities'] = self._hammer_to_dict(response.abuf.authorities)
+                source['authorities'] = self._clean_array(response.abuf.authorities)
             if response.abuf.additionals:
-                source['additionals'] = self._hammer_to_dict(response.abuf.additionals)
+                source['additionals'] = self._clean_array(response.abuf.additionals)
+            self.logger.debug('Yeild measuerment {}'.format(source))
             yield(source)
 
