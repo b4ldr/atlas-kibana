@@ -35,27 +35,25 @@ class Measurment(object):
         '''try to force a dict from a list of objects'''
         return [ self._clean_dict(value.__dict__) for value in list_in ]
 
+    def _get_source(source):
+        source          = self._clean_dict(self.payload)
+        source['probe'] = self._clean_dict(self.probe.__dict__)
+        #remove the result we will replace this with something nicer
+        if 'result' in source:
+            del source['result']
+        source['timestamp']  = datetime.datetime.utcfromtimestamp(source['timestamp']).isoformat()
+        return source
+
 class MeasurmentDNS(Measurment):
 
     def __init__(self, payload, probe):
         super(MeasurmentDNS, self).__init__(payload, probe)
         self.logger = logging.getLogger('atlas-kibana.MeasurmentDNS')
 
-    def get_elasticsearch_source(self):
-        '''Genrater to create elasic search source as used by 
-        elasticsearch.helpers.streaming_bulk
-        http://elasticsearch-py.readthedocs.org/en/latest/helpers.html'''
-        source = dict()
+    def get_actions(self):
+        source  = self._get_source()
         actions = []
         for response in self.parsed.responses:
-            source          = self._clean_dict(self.payload)
-            msm_type        = source['type']
-            source['probe'] = self._clean_dict(self.probe.__dict__)
-
-            #remove the result we will replace this with something nicer
-            if 'result' in source:
-                del source['result']
-            source['timestamp']  = datetime.datetime.utcfromtimestamp(source['timestamp']).isoformat()
             if response.abuf.header:
                 source['header'] = self._clean_dict(response.abuf.header.__dict__)
             if response.abuf.edns0:
@@ -73,3 +71,16 @@ class MeasurmentDNS(Measurment):
             actions.append(source)
         return actions
 
+class MeasurmentTraceroute(Measurment):
+
+    def __init__(self, payload, probe):
+        super(MeasurmentTraceroute, self).__init__(payload, probe)
+        self.logger = logging.getLogger('atlas-kibana.MeasurmentTraceroute')
+
+    def get_actions(self):
+        source  = self._get_source()
+        actions = []
+        for response in self.parsed.responses:
+            actions.append(source)
+        print actions
+        #return actions

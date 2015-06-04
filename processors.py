@@ -107,7 +107,7 @@ class ProcessorLatest(Processor):
                     continue
                 for m in measurement_json:
                     measurement = measuerments.MeasurmentDNS(m, probe)
-                    self._index_items(measurement.get_elasticsearch_source())
+                    self._index_items(measurement.get_actions())
 
 class ProcessorBulk(Processor):
 
@@ -155,7 +155,7 @@ class ProcessorBulk(Processor):
                             self.already_warned.append(probe_id)
                         continue
                     measurement = measuerments.MeasurmentDNS(measurement_json, probe)
-                    actions += measurement.get_elasticsearch_source()
+                    actions += measurement.get_actions()
                     count += 1
                     if not count % 1000:
                         self.logger.info('{}: parsed {} measuerments'.format(measurement_id, count)) 
@@ -191,7 +191,7 @@ class ProcessorStream(Processor):
                 self.already_warned.append(probe_id)
             return
         measurement   = measuerments.MeasurmentDNS(measurement_json, probe)
-        self.actions += measurement.get_elasticsearch_source()
+        self.actions += measurement.get_actions()
         if len(self.actions) == 200:
             self._index_items(self.actions)
             self.actions = []

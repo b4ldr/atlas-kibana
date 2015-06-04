@@ -157,7 +157,7 @@ class Probe(object):
 
     def get_location_meta(self, country_code):
         '''use restcountries.eu to get the location'''
-        url = 'https://restcountries.eu/rest/v1/alpha?codes={}'.format(country_code.lower())
+        url = 'http://restcountries.eu/rest/v1/alpha/{}'.format(country_code.lower())
         try:
             location = requests.get(url, verify=False).json()
             self.logger.debug('{}:Add location for {}'.format(self.id, country_code))
