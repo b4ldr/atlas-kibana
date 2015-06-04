@@ -44,16 +44,16 @@ class Processor(object):
     def _index_items(self, actions, chunk_size=200, timeout=30):
         client = elasticsearch.Elasticsearch(hosts=self.hosts, timeout=timeout)
         try:
-            for ok, result in elasticsearch.helpers.streaming_bulk(
+            success, errors = elasticsearch.helpers.bulk(
                 client,
                 actions,
                 index=self.index,
                 doc_type=self.doc_type,
-                chunk_size=chunk_size):
-                action, result = result.popitem()
-                if not ok:
-                    doc_id = result['_id']
-                    self.logger.warning('Could not {0} document {1}: {2}'.format(action, doc_id, result))
+                chunk_size=chunk_size)
+            self.logger.info('inserted actions: {}'.format(success)) 
+            if len(errors) > 0:
+                self.logger.error('problem inserting:\n{}'.format(errors))
+                self.logger.debug('actions\n{}'.format(action))
         except elasticsearch.exceptions.ConnectionTimeout:
             self.logger.error('Timed out submitting\n{}'.format(action))
 
@@ -99,7 +99,7 @@ class ProcessorLatest(Processor):
                 self.logger.info('Fetch probe {}'.format(probe_id))
                 probe = self.probes.get(probe_id)
                 if not probe:
-                    self.logger.warning('Unable to find Probe, skipping: {}'.format(probe_id))
+                    self.logger.warning('{}:Unable to find Probe, skipping: {}'.format(measurement_id, probe_id))
                     continue
                 for m in measurement_json:
                     measurement = measuerments.MeasurmentDNS(m, probe)
@@ -130,7 +130,9 @@ class ProcessorBulk(Processor):
                 help='to save on memory we fetch data in chunks.  value in seconds default: 86400')
 
     def process(self):
+        actions = []
         for measurement_id in self.measurement_ids:
+            self.logger.info('process measurement: {}'.format(measurement_id))
             chunk_stop_time   = self.start_time + self.chunk_period
             chunk_start_time = self.start_time
             while chunk_start_time < self.stop_time:
@@ -140,12 +142,14 @@ class ProcessorBulk(Processor):
                 self.logger.info('finished fetching measuerments: {}'.format(url))
                 for measurement_json in measurement_data:
                     probe_id = measurement_json['prb_id']
-                    self.logger.info('Fetch probe {}'.format(probe_id))
+                    self.logger.debug('{}:Fetch probe {}'.format(measurement_id, probe_id))
                     probe = self.probes.get(probe_id)
                     if not probe:
-                        self.logger.warning('Unable to find Probe, skipping: {}'.format(probe_id))
+                        self.logger.warning('{}:Unable to find Probe, skipping: {}'.format(measurement_id, probe_id))
                         continue
                     measurement = measuerments.MeasurmentDNS(measurement_json, probe)
-                    self._index_items(measurement.get_elasticsearch_source())
+                    actions += measurement.get_elasticsearch_source()
+
+                self._index_items(actions)
                 chunk_start_time = chunk_stop_time + 1
                 chunk_stop_time  = chunk_stop_time + self.chunk_period

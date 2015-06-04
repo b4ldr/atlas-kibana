@@ -28,6 +28,7 @@ def set_log_level(verbose):
         module_level = logging.DEBUG
     logging.basicConfig(level=level)
     logging.getLogger('elasticsearch').setLevel(level=level)
+    logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(level=module_level)
     logging.getLogger('urllib3.connectionpool').setLevel(level=module_level)
     logging.getLogger('elasticsearch.trace').setLevel(level=module_level)
     requests.packages.urllib3.disable_warnings()

@@ -46,6 +46,7 @@ class MeasurmentDNS(Measurment):
         elasticsearch.helpers.streaming_bulk
         http://elasticsearch-py.readthedocs.org/en/latest/helpers.html'''
         source = dict()
+        actions = []
         for response in self.parsed.responses:
             source          = self._clean_dict(self.payload)
             msm_type        = source['type']
@@ -69,5 +70,6 @@ class MeasurmentDNS(Measurment):
             if response.abuf.additionals:
                 source['additionals'] = self._clean_array(response.abuf.additionals)
             self.logger.debug('Yeild measuerment {}'.format(source))
-            yield(source)
+            actions.append(source)
+        return actions
 
