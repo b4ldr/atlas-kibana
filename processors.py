@@ -7,18 +7,20 @@ import logging
 import requests
 import argparse
 import measuerments
+import socketIO_client
 import elasticsearch
 import elasticsearch.helpers
 import elasticsearch.exceptions
 
 ATLAS_LATEST_API = 'https://atlas.ripe.net/api/v1/measurement-latest/{}/'
 ATLAS_BULK_API   = 'https://atlas.ripe.net/api/v1/measurement/{}/result/?start={}&stop={}'
-ATLAS_STREAM_API = 'https://atlas.ripe.net/api/v1/measurement-latest/'
+ATLAS_STREAM_API = 'http://atlas-stream.ripe.net/stream/socket.io'
 
 class Processor(object):
 
-    hosts   = []
-    api_url = ''
+    hosts          = []
+    api_url        = ''
+    already_warned = []
 
     def __init__(self, args):
         self.logger          = logging.getLogger('atlas-kibana.Processor')
@@ -51,13 +53,12 @@ class Processor(object):
                 index=self.index,
                 doc_type=self.doc_type,
                 chunk_size=chunk_size)
-            self.logger.info('inserted actions: {}'.format(success)) 
+            self.logger.info('completed: index {} actions'.format(success))
             if len(errors) > 0:
                 self.logger.error('problem inserting:\n{}'.format(errors))
                 self.logger.debug('actions\n{}'.format(action))
         except elasticsearch.exceptions.ConnectionTimeout:
             self.logger.error('Timed out submitting\n{}'.format(action))
-        self.logger.info('complete: index {} actions'.format(len(actions)))
 
     @staticmethod
     def add_args(parser):
@@ -133,7 +134,6 @@ class ProcessorBulk(Processor):
                 help='to save on memory we fetch data in chunks.  value in seconds default: 86400')
 
     def process(self):
-        already_warned = []
         for measurement_id in self.measurement_ids:
             self.logger.info('process measurement: {}'.format(measurement_id))
             chunk_stop_time   = self.start_time + self.chunk_period
@@ -150,9 +150,9 @@ class ProcessorBulk(Processor):
                     self.logger.debug('{}:Fetch probe {}'.format(measurement_id, probe_id))
                     probe = self.probes.get(probe_id)
                     if not probe:
-                        if probe_id not in already_warned:
+                        if probe_id not in self.already_warned:
                             self.logger.warning('{}:Unable to find Probe, skipping: {}'.format(measurement_id, probe_id))
-                            already_warned.append(probe_id)
+                            self.already_warned.append(probe_id)
                         continue
                     measurement = measuerments.MeasurmentDNS(measurement_json, probe)
                     actions += measurement.get_elasticsearch_source()
@@ -163,3 +163,43 @@ class ProcessorBulk(Processor):
                 self._index_items(actions)
                 chunk_start_time = chunk_stop_time + 1
                 chunk_stop_time  = chunk_stop_time + self.chunk_period
+
+class ProcessorStream(Processor):
+
+    actions = []
+
+    def __init__(self, args):
+        super(ProcessorStream, self).__init__(args)
+        self.logger  = logging.getLogger('atlas-kibana.ProcessorStream')
+
+    @staticmethod
+    def add_args(subparsers):
+        url = ATLAS_STREAM_API
+        parser = subparsers.add_parser('stream', help='use the atlas stream api')
+        super(ProcessorStream, ProcessorStream).add_args(parser)
+        parser.add_argument('-U', '--url',
+                help='api url to use ({})'.format(url),
+                default=url)
+
+    def _process_measurement(self, measurement_json):
+        probe_id = measurement_json['prb_id']
+        self.logger.debug('Fetch probe {}'.format(probe_id))
+        probe = self.probes.get(probe_id)
+        if not probe:
+            if probe_id not in self.already_warned:
+                self.logger.warning('Unable to find Probe, skipping: {}'.format(probe_id))
+                self.already_warned.append(probe_id)
+            return
+        measurement   = measuerments.MeasurmentDNS(measurement_json, probe)
+        self.actions += measurement.get_elasticsearch_source()
+        if len(self.actions) == 200:
+            self._index_items(self.actions)
+            self.actions = []
+            
+        
+    def process(self):
+        s = socketIO_client.SocketIO('atlas-stream.ripe.net/stream', 80, socketIO_client.LoggingNamespace)
+        s.on('atlas_result', self._process_measurement)
+        for measurement_id in self.measurement_ids:
+            s.emit('atlas_subscribe', { 'stream_type': 'atlas_result', 'msm': measurement_id })
+        s.wait()
