@@ -40,7 +40,9 @@ class Probes(object):
     def load(self):
         '''load pickle data'''
         try:
+            self.logger.info('Loading probes from pickle file')
             self.probes = pickle.load(open(self.probes_file, 'rb'))
+            self.logger.info('Finished loading probes')
         except IOError:
             self.logger.warning('unable to load probes file {}'.format(self.probes_file))
 
@@ -62,10 +64,10 @@ class Probes(object):
     def refresh(self, force=False):
         '''load all atlas probes'''
         try:
-            self.logger.debug('fetching {}'.format(self.probe_archive_url))
+            self.logger.info('fetching {}'.format(self.probe_archive_url))
             probes = requests.get(self.probe_archive_url, verify=False).json().get(
                     'objects', [])
-            self.logger.debug('fetched {}'.format(self.probe_archive_url))
+            self.logger.info('fetched {}'.format(self.probe_archive_url))
         except Exception as e:
             self.logger.error('Could not fetch {0}:\n{1}'.format(self.probe_archive_url, e))
             return False
