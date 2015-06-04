@@ -41,7 +41,8 @@ class Processor(object):
                 'host' : host_name,
                 'port' : port })
 
-    def _index_items(self, actions, chunk_size=200, timeout=30):
+    def _index_items(self, actions, chunk_size=200, timeout=60):
+        self.logger.info('start: index {} actions'.format(len(actions)))
         client = elasticsearch.Elasticsearch(hosts=self.hosts, timeout=timeout)
         try:
             success, errors = elasticsearch.helpers.bulk(
@@ -56,6 +57,7 @@ class Processor(object):
                 self.logger.debug('actions\n{}'.format(action))
         except elasticsearch.exceptions.ConnectionTimeout:
             self.logger.error('Timed out submitting\n{}'.format(action))
+        self.logger.info('complete: index {} actions'.format(len(actions)))
 
     @staticmethod
     def add_args(parser):
@@ -71,6 +73,7 @@ class Processor(object):
                 help='Refresh the probe pickle data')
         parser.add_argument('measurement_ids',  nargs='+',
                 help='measurement(s) to index in Elasticsearch')
+
     def process(self):
         raise NotImplementedError('Subclasses should implement this!')
 
@@ -130,25 +133,32 @@ class ProcessorBulk(Processor):
                 help='to save on memory we fetch data in chunks.  value in seconds default: 86400')
 
     def process(self):
-        actions = []
+        already_warned = []
         for measurement_id in self.measurement_ids:
             self.logger.info('process measurement: {}'.format(measurement_id))
             chunk_stop_time   = self.start_time + self.chunk_period
             chunk_start_time = self.start_time
             while chunk_start_time < self.stop_time:
-                url = self.api_url.format(measurement_id, chunk_start_time, chunk_stop_time)
+                actions = []
+                url     = self.api_url.format(measurement_id, chunk_start_time, chunk_stop_time)
                 self.logger.info('fetching measuerments: {}'.format(url))
                 measurement_data = requests.get(url).json()
                 self.logger.info('finished fetching measuerments: {}'.format(url))
+                count = 0
                 for measurement_json in measurement_data:
                     probe_id = measurement_json['prb_id']
                     self.logger.debug('{}:Fetch probe {}'.format(measurement_id, probe_id))
                     probe = self.probes.get(probe_id)
                     if not probe:
-                        self.logger.warning('{}:Unable to find Probe, skipping: {}'.format(measurement_id, probe_id))
+                        if probe_id not in already_warned:
+                            self.logger.warning('{}:Unable to find Probe, skipping: {}'.format(measurement_id, probe_id))
+                            already_warned.append(probe_id)
                         continue
                     measurement = measuerments.MeasurmentDNS(measurement_json, probe)
                     actions += measurement.get_elasticsearch_source()
+                    count += 1
+                    if not count % 1000:
+                        self.logger.info('{}: parsed {} measuerments'.format(measurement_id, count)) 
 
                 self._index_items(actions)
                 chunk_start_time = chunk_stop_time + 1
