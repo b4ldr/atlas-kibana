@@ -193,7 +193,7 @@ class Probe(object):
         '''use RIPEstat to get the rir name'''
         try:
             whois = self.stat_api.get_data('whois', {'resource': prefix})
-            self.logger.info('recived ripe stat info:\n{}'.format(whois))
+            self.logger.debug('recived ripe stat info:\n{}'.format(whois))
             rir   = u','.join(whois.get('authorities', [])).encode('utf-8')
             self.logger.debug('{}:Add RIR "{}" for {}'.format(self.id, rir, prefix))
             return rir
@@ -204,7 +204,7 @@ class Probe(object):
         '''use RIPEstat to get the asn name'''
         try:
             asn_name = self.stat_api.get_data('as-overview',
-                {'resource': asn}).get('holder', None)
+                {'resource': asn}).get('holder', None).encode('utf-8')
             self.logger.debug('{}:Add AS name "{}" for {}'.format(
                 self.id, asn_name, asn))
             return asn_name
