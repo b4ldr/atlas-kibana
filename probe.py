@@ -161,9 +161,9 @@ class Probe(object):
         try:
             location = requests.get(url, verify=False).json()
             self.logger.debug('{}:Add location for {}'.format(self.id, country_code))
-            return location[0]
+            return location
         except Exception as e:
-            self.logger.error('Could not fetch {}:\n{}'.format(url, e))
+            self.logger.error('Could not fetch {}:{}\n{}'.format(url, location,  e))
 
     def get_location(self):
         location          = self.get_location_meta(self.country_code)
