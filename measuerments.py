@@ -37,8 +37,10 @@ class Measurment(object):
         return [ self._clean_dict(value.__dict__) for value in list_in ]
 
     def _get_source(self):
-        source          = self._clean_dict(self.payload)
-        source['probe'] = self._clean_dict(self.probe.__dict__)
+        source           = self._clean_dict(self.payload)
+        source['_index'] = 'atlas-{}'.format(self.payload['type'])
+        source['_type']  = 'atlas-document'
+        source['probe']  = self._clean_dict(self.probe.__dict__)
         #remove the result we will replace this with something nicer
         if 'result' in source:
             del source['result']

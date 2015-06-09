@@ -28,8 +28,6 @@ class Processor(object):
     def __init__(self, args):
         self.logger           = logging.getLogger('atlas-kibana.Processor')
         self.probes           = probe.Probes(args.refresh_probes)
-        self.index            = args.index
-        self.doc_type         = args.doc_type
         self.api_url          = args.url
 
         self._set_measurement_ids(args.measurement_ids)
@@ -64,8 +62,6 @@ class Processor(object):
             success, errors = elasticsearch.helpers.bulk(
                 client,
                 actions,
-                index=self.index,
-                doc_type=self.doc_type,
                 chunk_size=chunk_size)
             self.logger.info('completed: index {} actions'.format(success))
             if len(errors) > 0:
@@ -85,10 +81,6 @@ class Processor(object):
     def add_args(parser):
         ''' add the default set of arguments to each sub parser so the cli documenbtation and use is more intuative'''
         parser.add_argument('--verbose', '-v', action='count')
-        parser.add_argument('-D', '--doc-type', required=True,
-                help='Document to store probe and measurement data in.')
-        parser.add_argument('-I', '--index', required=True,
-                help='Index to store probe and measurement data in.')
         parser.add_argument('-H', '--hosts', default='localhost:9200',
                 help='elastic search backend servers')
         parser.add_argument('--refresh-probes', action='store_true', 
