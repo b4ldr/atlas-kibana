@@ -1,7 +1,7 @@
 #Used to create the index for the atlas measuerments
-PUT /_template/atlas
+PUT /_template/atlas-dns
 {
-  "template": "atlas*",
+  "template": "atlas-dns*",
     "settings": {
       "number_of_shards": "1",
       "number_of_replicas": "0",

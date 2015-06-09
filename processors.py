@@ -11,6 +11,7 @@ import socketIO_client
 import elasticsearch
 import elasticsearch.helpers
 import elasticsearch.exceptions
+from ripe.atlas.cousteau import MeasurementRequest
 
 ATLAS_LATEST_API = 'https://atlas.ripe.net/api/v1/measurement-latest/{}/'
 ATLAS_BULK_API   = 'https://atlas.ripe.net/api/v1/measurement/{}/result/?start={}&stop={}'
@@ -18,19 +19,32 @@ ATLAS_STREAM_API = 'http://atlas-stream.ripe.net/stream/socket.io'
 
 class Processor(object):
 
-    hosts          = []
-    api_url        = ''
-    already_warned = []
+    hosts           = []
+    api_url         = ''
+    actions         = []
+    already_warned  = []
+    measurement_ids = dict()
 
     def __init__(self, args):
-        self.logger          = logging.getLogger('atlas-kibana.Processor')
-        self.probes          = probe.Probes(args.refresh_probes)
-        self.index           = args.index
-        self.doc_type        = args.doc_type
-        self.api_url         = args.url
-        self.measurement_ids = args.measurement_ids
+        self.logger           = logging.getLogger('atlas-kibana.Processor')
+        self.probes           = probe.Probes(args.refresh_probes)
+        self.index            = args.index
+        self.doc_type         = args.doc_type
+        self.api_url          = args.url
+
+        self._set_measurement_ids(args.measurement_ids)
         self._format_hosts(args.hosts)
         
+    def _set_measurement_ids(self, measurement_ids):
+        for measurement_id in measurement_ids:
+            self.logger.info('fetch msm metata data: {}'.format(measurement_id))
+            filters = {'msm_id': measurement_id }
+            measurements = MeasurementRequest(**filters)
+            self.measurement_ids[measurement_id] = measurements.next()
+            self.logger.debug('fetched msm metata data: {}\n{}'.format(
+                measurement_id, self.measurement_ids[measurement_id]))
+
+
     def _format_hosts(self, hosts):
         '''format the hosts argument into a json blob'''
         for host in hosts.split(','):
@@ -58,7 +72,14 @@ class Processor(object):
                 self.logger.error('problem inserting:\n{}'.format(errors))
                 self.logger.debug('actions\n{}'.format(action))
         except elasticsearch.exceptions.ConnectionTimeout:
-            self.logger.error('Timed out submitting\n{}'.format(action))
+            self.logger.error('Timed out submitting\n{}'.format(actions))
+
+    @staticmethod
+    def _get_measurement(measurement, probe):
+        return {
+                'dns': measuerments.MeasurmentDNS,
+                'traceroute': measuerments.MeasurmentTraceroute,
+                }.get(measurement['type'], measuerments.Measurment)(measurement, probe)
 
     @staticmethod
     def add_args(parser):
@@ -94,11 +115,12 @@ class ProcessorLatest(Processor):
                 default=url)
 
     def process(self):
-        for measurement_id in self.measurement_ids:
-            self.logger.info('fetching measuerments: {}'.format(url))
+        actions = []
+        for measurement_id, meta in self.measurement_ids.items():
             url = self.api_url.format(measurement_id)
-            self.logger.info('finished fetching measuerments: {}'.format(url))
+            self.logger.info('fetching measuerments: {}'.format(url))
             measurement_data = requests.get(url).json()
+            self.logger.info('finished fetching measuerments: {}'.format(url))
             for probe_id, measurement_json in measurement_data.items():
                 self.logger.info('Fetch probe {}'.format(probe_id))
                 probe = self.probes.get(probe_id)
@@ -106,8 +128,9 @@ class ProcessorLatest(Processor):
                     self.logger.warning('{}:Unable to find Probe, skipping: {}'.format(measurement_id, probe_id))
                     continue
                 for m in measurement_json:
-                    measurement = measuerments.MeasurmentDNS(m, probe)
-                    self._index_items(measurement.get_actions())
+                    measurement = self._get_measurement(m, probe)
+                    actions += measurement.get_actions()
+            self._index_items(actions)
 
 class ProcessorBulk(Processor):
 
@@ -115,8 +138,10 @@ class ProcessorBulk(Processor):
         super(ProcessorBulk, self).__init__(args)
         self.logger       = logging.getLogger('atlas-kibana.ProcessorBulk')
         self.start_time   = args.start_time
-        self.stop_time     = min(args.stop_time, int(time.time()))
+        self.stop_time    = min(args.stop_time, int(time.time()))
         self.chunk_period = args.chunk_period
+        if self.stop_time < self.start_time:
+            raise ValueError('stop time ({}) is before start time ({})'.format(self.start_time, self.stop_time))
 
     @staticmethod
     def add_args(subparsers):
@@ -134,10 +159,11 @@ class ProcessorBulk(Processor):
                 help='to save on memory we fetch data in chunks.  value in seconds default: 86400')
 
     def process(self):
-        for measurement_id in self.measurement_ids:
+        for measurement_id, meta in self.measurement_ids.items():
             self.logger.info('process measurement: {}'.format(measurement_id))
-            chunk_stop_time   = self.start_time + self.chunk_period
-            chunk_start_time = self.start_time
+            start_time       = max(self.start_time, self.measurement_ids[measurement_id]['creation_time'])
+            chunk_stop_time  = start_time + self.chunk_period
+            chunk_start_time = start_time
             while chunk_start_time < self.stop_time:
                 actions = []
                 url     = self.api_url.format(measurement_id, chunk_start_time, chunk_stop_time)
@@ -154,9 +180,9 @@ class ProcessorBulk(Processor):
                             self.logger.warning('{}:Unable to find Probe, skipping: {}'.format(measurement_id, probe_id))
                             self.already_warned.append(probe_id)
                         continue
-                    measurement = measuerments.MeasurmentDNS(measurement_json, probe)
-                    actions += measurement.get_actions()
-                    count += 1
+                    measurement = self._get_measurement(measurement_json, probe)
+                    actions    += measurement.get_actions()
+                    count      += 1
                     if not count % 1000:
                         self.logger.info('{}: parsed {} measuerments'.format(measurement_id, count)) 
 
@@ -167,7 +193,6 @@ class ProcessorBulk(Processor):
 class ProcessorStream(Processor):
 
     actions = []
-
     def __init__(self, args):
         super(ProcessorStream, self).__init__(args)
         self.logger  = logging.getLogger('atlas-kibana.ProcessorStream')
@@ -190,7 +215,7 @@ class ProcessorStream(Processor):
                 self.logger.warning('Unable to find Probe, skipping: {}'.format(probe_id))
                 self.already_warned.append(probe_id)
             return
-        measurement   = measuerments.MeasurmentDNS(measurement_json, probe)
+        measurement   = self._get_measurement(measurement_json, probe)
         self.actions += measurement.get_actions()
         if len(self.actions) == 200:
             self._index_items(self.actions)

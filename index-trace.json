@@ -1,0 +1,47 @@
+#Used to create the index for the atlas measuerments
+PUT /_template/atlas
+{
+  "template": "atlas-traceroute*",
+  "settings": {
+    "number_of_shards": "1",
+    "number_of_replicas": "0",
+    "index.refresh_interval": "15s"
+  },
+  "mappings": {
+    "_default_": {
+      "dynamic_templates": [{
+        "string_fields": {
+          "mapping": {
+            "index": "analyzed",
+            "omit_norms": true,
+            "type": "string",
+            "fields": {
+              "raw": {
+                "index": "not_analyzed",
+                "ignore_above": 32776,
+                "type": "string"
+              }
+            }
+          },
+          "match": "*",
+          "match_mapping_type": "string"
+        }
+      }],
+      "properties": {
+        "hops": {
+          "type": "nested",
+          "include_in_parent": true,
+          "properties": {
+            "packets": {
+              "type": "nested",
+              "include_in_parent": true,
+              "properties": {
+                "origin": {"type": "string", "index": "not_analyzed" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import logging
 import datetime
+import libwhois
 from ripe.atlas.sagan import Result, ResultParseError
 
 class Measurment(object):
@@ -22,7 +23,7 @@ class Measurment(object):
     @staticmethod
     def _clean_dict(dict_in):
         '''clean dict usless stuuf'''
-        remove = ['fw', 'lts', 'msm_name', 'is_error', 'error_message', 'is_malformed', 
+        remove = ['fw', 'lts', 'msm_name', 'is_error', 'error_message', 'is_malformed', 'icmp_header',
                 '_on_error', '_on_malformation', 'klass', 'raw_data', 'stat_api', 'logger']
         for word in remove:
             try:
@@ -35,14 +36,20 @@ class Measurment(object):
         '''try to force a dict from a list of objects'''
         return [ self._clean_dict(value.__dict__) for value in list_in ]
 
-    def _get_source(source):
+    def _get_source(self):
         source          = self._clean_dict(self.payload)
         source['probe'] = self._clean_dict(self.probe.__dict__)
         #remove the result we will replace this with something nicer
         if 'result' in source:
             del source['result']
         source['timestamp']  = datetime.datetime.utcfromtimestamp(source['timestamp']).isoformat()
+
         return source
+
+    def get_actions(self):
+        self.logger.warning('no defined parser for {} so just throwing what we get from sagan'.format(self.payload['type']))
+        return [self._get_source()]
+        
 
 class MeasurmentDNS(Measurment):
 
@@ -75,12 +82,33 @@ class MeasurmentTraceroute(Measurment):
 
     def __init__(self, payload, probe):
         super(MeasurmentTraceroute, self).__init__(payload, probe)
-        self.logger = logging.getLogger('atlas-kibana.MeasurmentTraceroute')
+        self.logger    = logging.getLogger('atlas-kibana.MeasurmentTraceroute')
+        self.asn_whois = libwhois.ASNWhois()
 
     def get_actions(self):
-        source  = self._get_source()
-        actions = []
-        for response in self.parsed.responses:
-            actions.append(source)
-        print actions
-        #return actions
+        source                             = self._get_source()
+        source['hops']                     = self._clean_array(self.parsed.hops)
+        source['destination_ip_responded'] = self.parsed.destination_ip_responded
+        source['last_hop_responded']       = self.parsed.last_hop_responded
+        source['last_rtt']                 = self.parsed.last_rtt
+        source['total_hops']               = self.parsed.total_hops
+        seen_as                            = set()
+        self.asn_whois.query               = []
+        for hop in source['hops']:
+            hop['packets']       = self._clean_array(hop['packets'])
+            hop['first_origin']  = hop['packets'][0].get('origin', None)
+            if hop['first_origin']:
+                self.asn_whois.query.append(hop['first_origin'])
+        #loop twice to so we only make one call to shadow servers
+        for hop in source['hops']:
+            try:
+                hop['asn'] = self.asn_whois.result[hop['first_origin']].asn
+                seen_as.add(hop['asn'])
+            except KeyError:
+                self.logger.warning('unable to get first_origin for {} {}'.format(self.parsed, hop['first_origin']))
+            except libwhois.QueryError:
+                self.logger.warning('unable to get ASN for {} {}'.format(self.parsed, hop['first_origin']))
+        source['total_as_hops'] = len(seen_as)
+        return [source]
+
+
