@@ -107,7 +107,7 @@ class MeasurmentTraceroute(Measurment):
                 hop['asn'] = self.asn_whois.result[hop['first_origin']].asn
                 seen_as.add(hop['asn'])
             except KeyError:
-                self.logger.warning('unable to get first_origin for {} {}'.format(self.parsed, hop['first_origin']))
+                self.logger.debug('unable to get first_origin for {} {}'.format(self.parsed, hop['first_origin']))
             except libwhois.QueryError:
                 self.logger.warning('unable to get ASN for {} {}'.format(self.parsed, hop['first_origin']))
         source['total_as_hops'] = len(seen_as)

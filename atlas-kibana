@@ -15,6 +15,7 @@ def get_args():
 
 def set_log_level(verbose):
     '''set the logger level'''
+    log_format   = "%(asctime)s:%(levelname)s:%(message)s"
     level        = logging.ERROR
     module_level = logging.ERROR
     if verbose == 1:
@@ -27,7 +28,7 @@ def set_log_level(verbose):
         module_level = logging.INFO
     elif verbose > 3:
         module_level = logging.DEBUG
-    logging.basicConfig(level=level)
+    logging.basicConfig(level=level, format=log_format)
     logging.getLogger('elasticsearch').setLevel(level=level)
     logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(level=module_level)
     logging.getLogger('urllib3.connectionpool').setLevel(level=module_level)
