@@ -15,7 +15,7 @@ def get_args():
 
 def set_log_level(verbose):
     '''set the logger level'''
-    log_format   = "%(asctime)s:%(levelname)s:%(message)s"
+    log_format   = "%(asctime)s;%(levelname)s;%(message)s"
     level        = logging.ERROR
     module_level = logging.ERROR
     if verbose == 1:
